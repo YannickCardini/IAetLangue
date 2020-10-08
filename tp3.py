@@ -3,6 +3,7 @@ import nltk
 from nltk import word_tokenize
 from nltk.tree import Tree
 import re
+import xml.etree.ElementTree as ET
 
 def getNodes(parent):
     for node in parent:
@@ -16,24 +17,29 @@ def getNodes(parent):
             getNodes(node)
     return None,None
 
-# TODO Rajouter How dans le regex
 def getInterrogativeWord(phrase):
     if(type(phrase) == list):
         phrase = " ".join(phrase)
-    match = re.search('([wW])(here|ho|hat|hich|hen)',phrase)
-    return match.group()
+    match = re.search('(([wW])(here|ho|hat|hich|hen))|([hH]ow)',phrase)
+    if (match != None):
+        return match.group()
+    else:
+        return None
 
-# TODO Changer la facon de lire le fichier XML 
-url = "file:///home/loubard/Documents/python/cabrio/IAetLangue/questions.xml"
-reponse = request.urlopen(url).read().decode('utf8')
-tokens = word_tokenize(reponse)
-phrase1 = tokens[325:329]
-phrase2 = tokens[593:601]
-phrase3 = tokens[884:892]
-tagged = nltk.pos_tag(phrase3)
-entities = nltk.chunk.ne_chunk(tagged)
-label, word = getNodes(entities)
-intWord = getInterrogativeWord(phrase2)
+url = "/home/loubard/Documents/python/cabrio/IAetLangue/questions.xml"
+tree = ET.parse(url)
+root = tree.getroot()
+questions = []
+for child in root:
+    for question in child:
+        if(question.tag == 'string' and question.attrib['lang'] == 'en'):
+            questions.append(question.text)
+            tokens = word_tokenize(question.text)
+            tagged = nltk.pos_tag(tokens)
+            entities = nltk.chunk.ne_chunk(tagged)
+            label, word = getNodes(entities)
+            print(question.text)
+            intWord = getInterrogativeWord(question.text)
 
 
     
