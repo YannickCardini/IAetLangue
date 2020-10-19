@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 import os
 from pathlib import Path
 from nltk.corpus import wordnet as wn
+import json
 
 url = Path(os.getcwd())
 
@@ -108,12 +109,22 @@ def getdbo(tokens):
         for token in tokens:
             dbos.append(getPathSimilarity(token))
         dbos = [i for i in dbos if i]#Remove None
-        print(dbos)
     if len(dbos) > 1:
         dbo = max(dbos,key=lambda item:item[1])[0]
     else:
         dbo = dbos[0][0]        
     return dbo
+
+def getResp(q1):
+    res = []
+    try:
+        json_dictionary = json.loads(q1)
+    except:
+        return None
+    bindings = json_dictionary["results"]["bindings"]
+    for uri in bindings:
+        res.append(uri["uri"]["value"])
+    return res
 
 questionXML = url / "questions.xml"
 tree = ET.parse(os.path.join(questionXML))
@@ -129,19 +140,12 @@ for child in root:
             entities = nltk.chunk.ne_chunk(tagged)
             label, word = getNodes(entities)
             dbo = getdbo(tokens)
+            # intWord = getInterrogativeWord(question.text)
+            q1 = "PREFIX dbo: <http://dbpedia.org/ontology/> PREFIX res: <http://dbpedia.org/resource/> SELECT DISTINCT ?uri WHERE { res:" + getKeyword(word) + " dbo:" + dbo + " ?uri .}"   
+            resp = getResp(query(q1))
             print(question.text)
             print("dbo:",dbo)
-            # print("Label: ",label)
-            # print("Word(s): ", getKeyword(word))
-            # intWord = getInterrogativeWord(question.text)
-            q1 = "PREFIX dbo: <http://dbpedia.org/ontology/> PREFIX res: <http://dbpedia.org/resource/> SELECT DISTINCT ?uri WHERE { res:" + word + " dbo:" + dbo + " ?uri .}"   
-            print(query(q1))
-
-
-
-
-
-# for db in dbo:
-#     similarity = similar("cross",db)
-#     if( similarity > 0.5):
-#         print(db,similarity)
+            print("Label: ",label)
+            print("Word(s): ", getKeyword(word))
+            print("Reponse: ",resp)
+            print("\n")
