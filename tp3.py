@@ -6,6 +6,8 @@ import re
 import xml.etree.ElementTree as ET
 import requests
 from difflib import SequenceMatcher
+import os
+from pathlib import Path
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
@@ -54,22 +56,24 @@ def getKeyword(queryString):
             if(element.tag == "URI"):
                 return element.text.split("/")[-1]
 
-url = "/home/loubard/Documents/python/cabrio/IAetLangue/"
-# tree = ET.parse(url + "questions.xml")
-# root = tree.getroot()
-# questions = []
-# for child in root:
-#     for question in child:
-#         if(question.tag == 'string' and question.attrib['lang'] == 'en'):
-#             questions.append(question.text)
-#             tokens = word_tokenize(question.text)
-#             tagged = nltk.pos_tag(tokens)
-#             entities = nltk.chunk.ne_chunk(tagged)
-#             label, word = getNodes(entities)
-#             print(question.text)
-#             print("Label: ",label)
-#             print("Word(s): ", getKeyword(word))
-#             intWord = getInterrogativeWord(question.text)
+
+url = Path(os.getcwd())
+questionXML = url / "questions.xml"
+tree = ET.parse(os.path.join(questionXML))
+root = tree.getroot()
+questions = []
+for child in root:
+    for question in child:
+        if(question.tag == 'string' and question.attrib['lang'] == 'en'):
+            questions.append(question.text)
+            tokens = word_tokenize(question.text)
+            tagged = nltk.pos_tag(tokens)
+            entities = nltk.chunk.ne_chunk(tagged)
+            label, word = getNodes(entities)
+            print(question.text)
+            print("Label: ",label)
+            print("Word(s): ", getKeyword(word))
+            intWord = getInterrogativeWord(question.text)
 
 
 
@@ -77,7 +81,7 @@ url = "/home/loubard/Documents/python/cabrio/IAetLangue/"
 # print(query(q1))
 dbo = []
 dbp = []
-fs = open(url + "relations.txt",'r')  
+fs = open(url / "relations.txt",'r')  
 for line in fs.readlines():
     db, relation = line.split(":")
     if(db == "dbo"):
