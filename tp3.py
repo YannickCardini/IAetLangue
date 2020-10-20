@@ -16,9 +16,11 @@ url = Path(os.getcwd())
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
+#TODO Rajouter méthode pour choisir la meilleure node parmis nltkTree
 def getNodes(parent):
-    for node in parent:
-        if type(node) is nltk.Tree:
+    nltkTree = [x for x in parent if type(x) is nltk.Tree]
+    if len(nltkTree) > 0:
+        for node in nltkTree:
             if node.label() != 'ROOT' and (node[0][1] == "NNP" or node[0][1] == "NNPS") and node[0][0] != "Which":
                 label = node.label()
                 words = ""
@@ -26,7 +28,8 @@ def getNodes(parent):
                     words += word[0] + " "
                 return (label,words)
             getNodes(node)
-        else:
+    else:
+        for node in parent:
             if(node[1] == "NNP" or node[1] == "NNPS"):
                 return (None,node[0])
     return None,None
@@ -116,6 +119,7 @@ def getdbo(tokens):
     return dbo
 
 def getResp(q1):
+    print(q1)
     res = []
     try:
         json_dictionary = json.loads(q1)
@@ -133,6 +137,7 @@ questions = []
 
 for child in root:
     for question in child:
+        gold_standard_answers = []
         if(question.tag == 'string' and question.attrib['lang'] == 'en'):
             questions.append(question.text)
             tokens = word_tokenize(question.text)
@@ -143,9 +148,14 @@ for child in root:
             # intWord = getInterrogativeWord(question.text)
             q1 = "PREFIX dbo: <http://dbpedia.org/ontology/> PREFIX res: <http://dbpedia.org/resource/> SELECT DISTINCT ?uri WHERE { res:" + getKeyword(word) + " dbo:" + dbo + " ?uri .}"   
             resp = getResp(query(q1))
-            print(question.text)
-            print("dbo:",dbo)
-            print("Label: ",label)
-            print("Word(s): ", getKeyword(word))
-            print("Reponse: ",resp)
-            print("\n")
+        if(question.tag == 'answers'):
+            for answer in question:
+                for uri in answer:
+                    gold_standard_answers.append(uri.text)
+    print(questions[-1])
+    print("dbo:",dbo)
+    print("Label: ",label)
+    print("Word(s): ", getKeyword(word))
+    print("Reponse: ",resp)
+    nb_bonne_reponse = [(x == y) for x, y in zip(resp, gold_standard_answers)].count(True)
+    print("Nombre de bonnes réponses: ",nb_bonne_reponse,"\n")     
