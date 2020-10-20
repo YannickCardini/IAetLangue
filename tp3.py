@@ -16,23 +16,43 @@ url = Path(os.getcwd())
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
-#TODO Rajouter méthode pour choisir la meilleure node parmis nltkTree
-def getNodes(parent):
-    nltkTree = [x for x in parent if type(x) is nltk.Tree]
-    if len(nltkTree) > 0:
-        for node in nltkTree:
-            if node.label() != 'ROOT' and (node[0][1] == "NNP" or node[0][1] == "NNPS") and node[0][0] != "Which":
+def getBestWords(nodes,intWord):
+    res = None
+    if len([x for x in nodes if x[0] is None]) == len(nodes):
+        return( "_".join([i[1] for i in nodes]))
+    else:
+        if intWord == "who" or intWord == "Who":
+            res = [y for x,y in nodes if x == "PERSON" ]
+            if len(res) == 0:
+                return nodes[0][1]
+            return res[0]
+        elif intWord == "when" or intWord == "When":
+            res = [y for x,y in nodes if x == "DATE" ]
+            if len(res) == 0:
+                return nodes[0][1]
+            return res[0]
+
+
+def getNodes(parent,intWord):
+    lbwd = []
+    for node in parent:
+        if type(node) is nltk.Tree:
+            if (node[0][1] == "NNP" or node[0][1] == "NNPS") and node[0][0] != "Which":
                 label = node.label()
                 words = ""
                 for word in node.leaves():
                     words += word[0] + " "
-                return (label,words)
-            getNodes(node)
-    else:
-        for node in parent:
+                lbwd.append((label,words))
+            getNodes(node,intWord)
+        else:
             if(node[1] == "NNP" or node[1] == "NNPS"):
-                return (None,node[0])
-    return None,None
+                lbwd.append((None,node[0]))
+    if len(lbwd) > 1:
+        return getBestWords(lbwd,intWord)
+    elif len(lbwd) == 1:
+        return lbwd[0][1]
+    else:
+        return None
 
 def getInterrogativeWord(phrase):
     if(type(phrase) == list):
@@ -54,13 +74,14 @@ def query(q, f='application/json'):
 
 def getKeyword(queryString):
     if(queryString == None):
-        return None
+        return ""
     resp = requests.get("https://lookup.dbpedia.org/api/search/PrefixSearch?&MaxHits=1&QueryString=" + queryString, headers={'Accept': 'application/json'})
     tree = ET.fromstring(resp.content)
     for child in tree:
         for element in child:
             if(element.tag == "URI"):
                 return element.text.split("/")[-1]
+    return ""
     
 def getRelations():
     dbo = []
@@ -80,7 +101,7 @@ def getBestSimilarity(token):
     dbo, dbp = getRelations()
     for db in dbo + dbp:
         similarity = similar(token,db)
-        if( similarity > 0.6):
+        if( similarity > 0.7):
             return db,similarity
     return None
 
@@ -98,6 +119,8 @@ def getPathSimilarity(token):
             simTuple = (db,tokenSyn[0].path_similarity(dbSyn[0]))
             if(simTuple[1] != None):
                 similarity.append(simTuple)
+    if(len(similarity) == 0):
+        return None
     dbo = max(similarity,key=lambda item:item[1])
     return dbo
 
@@ -119,12 +142,12 @@ def getdbo(tokens):
     return dbo
 
 def getResp(q1):
-    print(q1)
     res = []
     try:
         json_dictionary = json.loads(q1)
     except:
-        return None
+        print('\033[91m',"Echec de la requête:\n",q1,'\033[0m')
+        return []
     bindings = json_dictionary["results"]["bindings"]
     for uri in bindings:
         res.append(uri["uri"]["value"])
@@ -143,9 +166,9 @@ for child in root:
             tokens = word_tokenize(question.text)
             tagged = nltk.pos_tag(tokens)
             entities = nltk.chunk.ne_chunk(tagged)
-            label, word = getNodes(entities)
+            intWord = getInterrogativeWord(question.text)
+            word = getNodes(entities,intWord)
             dbo = getdbo(tokens)
-            # intWord = getInterrogativeWord(question.text)
             q1 = "PREFIX dbo: <http://dbpedia.org/ontology/> PREFIX res: <http://dbpedia.org/resource/> SELECT DISTINCT ?uri WHERE { res:" + getKeyword(word) + " dbo:" + dbo + " ?uri .}"   
             resp = getResp(query(q1))
         if(question.tag == 'answers'):
@@ -154,7 +177,6 @@ for child in root:
                     gold_standard_answers.append(uri.text)
     print(questions[-1])
     print("dbo:",dbo)
-    print("Label: ",label)
     print("Word(s): ", getKeyword(word))
     print("Reponse: ",resp)
     nb_bonne_reponse = [(x == y) for x, y in zip(resp, gold_standard_answers)].count(True)
