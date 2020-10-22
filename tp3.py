@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 from nltk.corpus import wordnet as wn
 import json
+from collections import Counter
+
 
 url = Path(os.getcwd())
 
@@ -99,10 +101,14 @@ def getBestSimilarity(token):
     if(token == None):
         return None
     dbo, dbp = getRelations()
-    for db in dbo + dbp:
+    for db in dbo:
         similarity = similar(token,db)
         if( similarity > 0.7):
-            return db,similarity
+            return db,similarity,"dbo"
+    for db in dbp:
+        similarity = similar(token,db)
+        if( similarity > 0.7):
+            return db,similarity,"dbp"
     return None
 
 def getPathSimilarity(token):
@@ -113,10 +119,16 @@ def getPathSimilarity(token):
         return None
     similarity = [] 
     dbo, dbp = getRelations()
-    for db in dbo + dbp:
+    for db in dbo:
         dbSyn = wn.synsets(db)
         if(len(dbSyn) > 0):
-            simTuple = (db,tokenSyn[0].path_similarity(dbSyn[0]))
+            simTuple = (db,tokenSyn[0].path_similarity(dbSyn[0]),"dbo")
+            if(simTuple[1] != None):
+                similarity.append(simTuple)
+    for db in dbp:
+        dbSyn = wn.synsets(db)
+        if(len(dbSyn) > 0):
+            simTuple = (db,tokenSyn[0].path_similarity(dbSyn[0]),"dbp")
             if(simTuple[1] != None):
                 similarity.append(simTuple)
     if(len(similarity) == 0):
@@ -125,21 +137,21 @@ def getPathSimilarity(token):
     return dbo
 
 
-def getdbo(tokens):
-    dbo = None
-    dbos = []
+def getdb(tokens):
+    db = None
+    dbs = []
     for token in tokens:
-        dbos.append(getBestSimilarity(token))
-    dbos = [i for i in dbos if i]#Remove None
-    if len(dbos) == 0:
+        dbs.append(getBestSimilarity(token))
+    dbs = [i for i in dbs if i]#Remove None
+    if len(dbs) == 0:
         for token in tokens:
-            dbos.append(getPathSimilarity(token))
-        dbos = [i for i in dbos if i]#Remove None
-    if len(dbos) > 1:
-        dbo = max(dbos,key=lambda item:item[1])[0]
+            dbs.append(getPathSimilarity(token))
+        dbs = [i for i in dbs if i]#Remove None
+    if len(dbs) > 1:
+        db = max(dbs,key=lambda item:item[1])
     else:
-        dbo = dbos[0][0]        
-    return dbo
+        db = dbs[0]       
+    return db
 
 def getResp(q1):
     res = []
@@ -157,6 +169,10 @@ questionXML = url / "questions.xml"
 tree = ET.parse(os.path.join(questionXML))
 root = tree.getroot()
 questions = []
+total_bonne_rep = 0
+total_rep = 0
+total_gold_rep = 0
+
 
 for child in root:
     for question in child:
@@ -168,16 +184,28 @@ for child in root:
             entities = nltk.chunk.ne_chunk(tagged)
             intWord = getInterrogativeWord(question.text)
             word = getNodes(entities,intWord)
-            dbo = getdbo(tokens)
-            q1 = "PREFIX dbo: <http://dbpedia.org/ontology/> PREFIX res: <http://dbpedia.org/resource/> SELECT DISTINCT ?uri WHERE { res:" + getKeyword(word) + " dbo:" + dbo + " ?uri .}"   
+            db = getdb(tokens)
+            db_request = 'PREFIX res: <http://dbpedia.org/resource/>PREFIX dbp: <http://dbpedia.org/property/>' if db[2] == "dbp" else 'PREFIX res: <http://dbpedia.org/resource/>PREFIX dbo: <http://dbpedia.org/ontology/>'
+            select_request = 'SELECT DISTINCT ?uri WHERE { res:' + getKeyword(word) + " " + db[2] + ":" + db[0] + ' ?uri .}'
+            q1 = db_request + select_request   
             resp = getResp(query(q1))
         if(question.tag == 'answers'):
             for answer in question:
                 for uri in answer:
                     gold_standard_answers.append(uri.text)
     print(questions[-1])
-    print("dbo:",dbo)
+    print(db[2],db[0])
     print("Word(s): ", getKeyword(word))
     print("Reponse: ",resp)
-    nb_bonne_reponse = [(x == y) for x, y in zip(resp, gold_standard_answers)].count(True)
+    c = Counter(resp)
+    nb_bonne_reponse = sum(c[x] for x in gold_standard_answers)
     print("Nombre de bonnes réponses: ",nb_bonne_reponse,"\n")     
+    total_bonne_rep += nb_bonne_reponse
+    total_gold_rep += len(gold_standard_answers)
+    total_rep += len(resp)
+
+recall = total_bonne_rep/total_gold_rep
+prescion = total_bonne_rep/total_rep
+print("Recall: ", recall)
+print("Précision: ",prescion)
+print("F-measure: ", (2*prescion*recall)/(prescion+recall))
